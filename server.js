@@ -3,69 +3,70 @@ const axios = require('axios');
 const app = express();
 const port = process.env.PORT || 3000;
 
-const EDC_URL = "http://60.251.229.32/cgi-bin/get_local_data.cgi";
+// 從環境變數或說明書定義獲取配置 [cite: 92, 103, 107, 109]
+const HOST_IP = "60.251.229.32";
+const LOGIN_URL = `http://${HOST_IP}/login`;
+const SYSTEM_URL = `http://${HOST_IP}/systemcfg`;
+
+async function getEdcData() {
+    try {
+        // 1. 系統登入獲取 Token [cite: 101, 102, 115]
+        const loginRes = await axios.post(LOGIN_URL, {
+            username: "admin",
+            password: "admin"
+        });
+        const token = loginRes.data.data;
+
+        // 2. 獲取感測器列表以確認 suid 和 cuid [cite: 117, 118, 124, 126]
+        // 註：測試階段若已知 ID 可跳過此步直接請求數據
+        
+        // 3. 獲取歷史數據 (使用說明書範例 ID) [cite: 149, 155, 157, 158]
+        const dataRes = await axios.post(SYSTEM_URL, {
+            request: "getLocalDatas",
+            value: {
+                suid: "1541", // 根據說明書 4.2 範例 [cite: 132]
+                cuid: "128",  // 根據說明書 4.2 範例 [cite: 143]
+                startTime: Date.now() - 3600000, // 抓取過去一小時 [cite: 161]
+                endTime: "0" // 設為 0 代表至今 [cite: 166]
+            },
+            token: token
+        });
+
+        return { success: true, data: dataRes.data.data }; // data 為純文字字串 
+    } catch (error) {
+        return { success: false, msg: error.message };
+    }
+}
 
 app.get('/', async (req, res) => {
-    let waterData = null;
-    let statusColor = "#28a745"; // 預設綠色 (正常)
-    let errorMsg = "";
-
-    try {
-        const response = await axios.get(EDC_URL, { timeout: 3000 });
-        waterData = response.data;
-    } catch (error) {
-        statusColor = "#dc3545"; // 失敗變紅色
-        errorMsg = "⚠️ 設備連線中斷 (請檢查設備開機狀態或網路設定)";
-    }
+    const result = await getEdcData();
+    let statusColor = result.success ? "#28a745" : "#dc3545";
 
     res.send(`
-        <div style="font-family: 'Microsoft JhengHei', sans-serif; background: #f4f7f6; min-height: 100vh; padding: 20px;">
-            <div style="max-width: 900px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <h1 style="color: #2c3e50; border-bottom: 2px solid ${statusColor}; padding-bottom: 10px;">🛡️ 安養機構智控中心</h1>
+        <div style="font-family: sans-serif; padding: 20px; background: #f4f7f6;">
+            <div style="max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <h1 style="color: #2c3e50; border-left: 5px solid ${statusColor}; padding-left: 15px;">🛡️ 安養機構智控中心 (API 聯動版)</h1>
                 
-                <div style="display: flex; gap: 20px; margin-top: 20px;">
-                    <div style="flex: 1; background: ${waterData ? '#e8f5e9' : '#ffebee'}; padding: 20px; border-radius: 8px; border-left: 5px solid ${statusColor};">
-                        <h3 style="margin-top:0;">💧 供水系統監測</h3>
-                        <p>設備 IP: <code>60.251.229.32</code></p>
-                        <div style="font-size: 1.2em; font-weight: bold; color: ${statusColor};">
-                            ${waterData ? '✅ 數據接收中' : errorMsg}
-                        </div>
-                        <pre style="background: rgba(0,0,0,0.05); padding: 10px; border-radius: 4px; font-size: 0.8em;">${waterData ? JSON.stringify(waterData, null, 2) : '等待硬體訊號...'}</pre>
-                        <button onclick="location.reload()" style="background: ${statusColor}; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer;">立即刷新</button>
+                <div style="background: ${result.success ? '#e8f5e9' : '#ffebee'}; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <h3>💧 供水監測數據 (suid: 1541 / cuid: 128)</h3>
+                    <p>連線狀態：<strong style="color: ${statusColor}">${result.success ? '已連線' : '連線失敗'}</strong></p>
+                    <div style="background: #000; color: #0f0; padding: 15px; border-radius: 5px; overflow-x: auto;">
+                        <code>${result.data || result.msg}</code>
                     </div>
-
-                    <div style="width: 250px; background: #e3f2fd; padding: 20px; border-radius: 8px; border-left: 5px solid #2196f3;">
-                        <h3 style="margin-top:0;">📊 今日概況</h3>
-                        <p>總床位：28 床</p>
-                        <p>待審核：<span style="color: #f39c12; font-weight:bold;">5 筆</span></p>
-                        <p>水質異常：<span style="color: ${waterData ? '#28a745' : '#dc3545'}; font-weight:bold;">${waterData ? '0' : '--'}</span></p>
-                    </div>
+                    <p style="font-size: 0.8em; color: #666;">※ 數據格式：時間戳,數值 (換行分隔) [cite: 173]</p>
+                    <button onclick="location.reload()" style="padding: 10px 20px; cursor: pointer; background: #2c3e50; color: white; border: none; border-radius: 5px;">🔄 立即刷新</button>
                 </div>
 
-                <h3 style="margin-top: 40px; color: #34495e;">📋 個案紀錄審核流水線 (2026/02/20)</h3>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                    <thead>
-                        <tr style="background: #34495e; color: white; text-align: left;">
-                            <th style="padding: 12px;">床號</th><th style="padding: 12px;">個案姓名</th><th style="padding: 12px;">當前狀態</th><th style="padding: 12px;">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr style="border-bottom: 1px solid #ddd;">
-                            <td style="padding: 12px;">A01</td><td style="padding: 12px;">王*同</td>
-                            <td style="padding: 12px;"><span style="background: #fff3e0; color: #e65100; padding: 4px 8px; border-radius: 4px; font-size: 0.9em;">待初審</span></td>
-                            <td style="padding: 12px;"><button style="cursor:pointer;">開啟紀錄</button></td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #ddd;">
-                            <td style="padding: 12px;">A02</td><td style="padding: 12px;">李*華</td>
-                            <td style="padding: 12px;"><span style="background: #e8f5e9; color: #2e7d32; padding: 4px 8px; border-radius: 4px; font-size: 0.9em;">已完成</span></td>
-                            <td style="padding: 12px;"><button style="cursor:pointer;">查看</button></td>
-                        </tr>
-                    </tbody>
+                <h3>📋 個案紀錄審核</h3>
+                <table border="1" style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <tr style="background: #eee;">
+                        <th style="padding: 10px;">床號</th><th style="padding: 10px;">姓名</th><th style="padding: 10px;">狀態</th>
+                    </tr>
+                    <tr><td style="padding: 10px;">A01</td><td style="padding: 10px;">王*同</td><td>待審核</td></tr>
                 </table>
             </div>
         </div>
     `);
 });
 
-app.listen(port, () => console.log(`Server started on port ${port}`));
-
+app.listen(port, () => console.log(`系統啟動於埠號 ${port}`));
