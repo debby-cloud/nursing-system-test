@@ -1,4 +1,4 @@
-server.jsconst express = require('express');
+const express = require('express');
 const axios = require('axios');
 const { Pool } = require('pg');
 const app = express();
