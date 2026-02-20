@@ -1,0 +1,28 @@
+server.jsconst express = require('express');
+const axios = require('axios');
+const { Pool } = require('pg');
+const app = express();
+const port = process.env.PORT || 3000;
+
+// 資料庫連線 (Render 會自動提供)
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+
+app.get('/', (req, res) => {
+  res.send(`
+    <h1>安養機構管理系統 - 測試版</h1>
+    <p>狀態：系統運行中</p>
+    <div style="border: 1px solid #ccc; padding: 10px;">
+      <h3>供水設施監控 (EDC IP: ${process.env.EDC_IP || '未設定'})</h3>
+      <button onclick="location.reload()">重新整理數據</button>
+      <p id="water-data">正在連線至 EDC 設備...</p>
+    </div>
+    <hr>
+    <h3>28床個案紀錄 (三級審核測試)</h3>
+    <table border="1">
+      <tr><th>床號</th><th>姓名</th><th>狀態</th><th>動作</th></tr>
+      <tr><td>A01</td><td>王*同</td><td>待審核</td><td><button>初審</button></td></tr>
+    </table>
+  `);
+});
+
+app.listen(port, () => console.log(`測試系統已啟動：http://localhost:${port}`));
