@@ -1,4 +1,5 @@
-render.yamlservices:
+render.yaml
+services:
   - type: web
     name: nursing-system-web
     env: node
